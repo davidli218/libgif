@@ -1,0 +1,8 @@
+.vscode
+.idea
+
+CMakeListsPrivate.txt
+cmake-build-*/
+
+TestSamples
+test.c
