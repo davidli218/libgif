@@ -1,27 +1,30 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "libgif.h"
 
 static int readHeader(FILE *file, GIF_HEADER *returnHeader) {
     /**
      * Reads Header
+     *
+     * @return 0: Read successfully without error.
+     *         1: Unrecognisable Signature is found.
+     *         2: Unrecognisable Version is found.
      */
+
     char stringBuffer[6];
-    char expectedSignature[] = "GIF";
 
     fread(stringBuffer, 1, 6, file);
 
-    /* Check GIF Signature */
-    for (int i = 0; i < 3; ++i) {
-        if ((returnHeader->Signature[i] = stringBuffer[i]) ^ expectedSignature[i])
-            return 1;
-    }
+    memcpy(returnHeader->Signature, stringBuffer, 3);
+    memcpy(returnHeader->Version, stringBuffer + 3, 3);
 
-    /* Write GIF Version */
-    for (int i = 0; i < 3; ++i) {
-        returnHeader->Version[i] = stringBuffer[3 + i];
-    }
+    if (memcmp(returnHeader->Signature, "GIF", 3) != 0)
+        return 1;
+    if (memcmp(returnHeader->Version, "89a", 3) != 0
+        && memcmp(returnHeader->Version, "87a", 3) != 0)
+        return 2;
 
     return 0;
 }
