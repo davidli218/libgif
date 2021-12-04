@@ -33,6 +33,7 @@ static int readLSD(FILE *file, GIF_LSD *returnLSD) {
     /**
      * Reads Logical Screen Descriptor
      */
+
     fread(&returnLSD->Width, 2, 1, file);
     fread(&returnLSD->Height, 2, 1, file);
 
@@ -48,6 +49,7 @@ static int readGlobalColorTable(FILE *file, int tSize, GIF_COLOR_TABLE *returnGC
     /**
      * Reads Global Color Table
      */
+
     for (int i = 0; i < tSize; ++i) {
         fread((returnGCD + i), sizeof(GIF_COLOR_TABLE), 1, file);
     }
@@ -58,7 +60,6 @@ static int readGlobalColorTable(FILE *file, int tSize, GIF_COLOR_TABLE *returnGC
 static int readImageDescriptors(FILE *file, GIF_IMAGE *returnImages, int *returnSize) {
     char charBuffer;
     *returnSize = 0;
-
 
     for (fread(&charBuffer, 1, 1, file);
          charBuffer ^ ','; fread(&charBuffer, 1, 1, file)) {
@@ -72,6 +73,7 @@ static void printHeader(GIF_HEADER header) {
     /**
      * Print Header
      */
+
     printf("\n<Header>\n");
     printf("Format: %3.3s %3.3s\n", header.Signature, header.Version);
 }
@@ -80,10 +82,11 @@ static void printLSD(GIF_LSD lsd) {
     /**
      * Print Logical Screen Descriptor
      */
+
     printf("\n<Logical Screen Descriptor>\n");
     printf("Resolution: %d x %d\n", lsd.Width, lsd.Height);
 
-    printf("Global Color Table Flag: %s\n", lsd.GlobalFlag.GlobalPal ? "True" : "False");
+    printf("Have Global Color Table: %s\n", lsd.GlobalFlag.GlobalPal ? "True" : "False");
     printf("Color Resolution: %d bits\n", lsd.GlobalFlag.ColorRes + 1);
     printf("Sort Flag: %s\n", lsd.GlobalFlag.SortFlag ? "True" : "False");
     printf("Size of Global Color Table: %d\n", 1 << (lsd.GlobalFlag.PalBits + 1));
@@ -100,13 +103,14 @@ static void printGlobalColorTable(GIF_COLOR_TABLE *gct, int tSize) {
     /**
      * Print Global Color Table
      */
+
     GIF_COLOR_TABLE tableBuffer;
 
     printf("\n<Global Color Table>\n");
     for (int i = 0; i < tSize; ++i) {
         tableBuffer = *(gct + i);
-        printf("(%3.d, %3.d, %3.d)", tableBuffer.Red, tableBuffer.Green, tableBuffer.Blue);
-        printf((i + 1) % 8 == 0 ? "\n" : "\t");
+        printf("(%3.d,%3.d,%3.d)", tableBuffer.Red, tableBuffer.Green, tableBuffer.Blue);
+        printf((i + 1) % 8 == 0 ? "\n" : " ");
     }
 }
 
@@ -118,17 +122,17 @@ int getGifInfo(FILE *file) {
 
     if (readHeader(file, &header) != 0)
         return 1;  /* Not a GIF */
+    printHeader(header);
 
     readLSD(file, &lsd);
-
-    globalTable = (GIF_COLOR_TABLE *)
-            malloc(sizeof(GIF_COLOR_TABLE) * (1 << (lsd.GlobalFlag.PalBits + 1)));
-
-    readGlobalColorTable(file, 1 << (lsd.GlobalFlag.PalBits + 1), globalTable);
-
-    printHeader(header);
     printLSD(lsd);
-    printGlobalColorTable(globalTable, 1 << (lsd.GlobalFlag.PalBits + 1));
+
+    if (lsd.GlobalFlag.GlobalPal == 1) {
+        globalTable = (GIF_COLOR_TABLE *)
+                malloc(sizeof(GIF_COLOR_TABLE) * (1 << (lsd.GlobalFlag.PalBits + 1)));
+        readGlobalColorTable(file, 1 << (lsd.GlobalFlag.PalBits + 1), globalTable);
+        printGlobalColorTable(globalTable, 1 << (lsd.GlobalFlag.PalBits + 1));
+    }
 
     free(globalTable);
     free(localTable);
