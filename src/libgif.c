@@ -1,134 +1,133 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "libgif.h"
 
-static int readHeader(FILE *file, GIF_HEADER *returnHeader) {
-    /**
-     * Reads Header
-     */
+/**
+ * Reads Header (文件头)
+ */
+static PARSE_STATUS readHeader(FILE *file, GIF_HEADER *returnHeader) {
     char stringBuffer[6];
-    char expectedSignature[] = "GIF";
+
+    if (file == NULL || returnHeader == NULL) { return RECEIVED_NULL_PARAM; }
+    if (feof(file)) { return UNEXPECTED_EOF; }
 
     fread(stringBuffer, 1, 6, file);
 
-    /* Check GIF Signature */
-    for (int i = 0; i < 3; ++i) {
-        if ((returnHeader->Signature[i] = stringBuffer[i]) ^ expectedSignature[i])
-            return 1;
+    if (memcmp(stringBuffer, "GIF87a", 6) != 0 &&
+        memcmp(stringBuffer, "GIF89a", 6) != 0) {
+        memset(returnHeader->signature, 0, 3);
+        memset(returnHeader->version, 0, 3);
+
+        return UNEXPECTED_CONTENT;
     }
 
-    /* Write GIF Version */
-    for (int i = 0; i < 3; ++i) {
-        returnHeader->Version[i] = stringBuffer[3 + i];
-    }
+    memcpy(returnHeader, stringBuffer, 6);
 
-    return 0;
+    return PARSE_SUCCESS;
 }
 
-static int readLSD(FILE *file, GIF_LSD *returnLSD) {
-    /**
-     * Reads Logical Screen Descriptor
-     */
-    fread(&returnLSD->Width, 2, 1, file);
-    fread(&returnLSD->Height, 2, 1, file);
+/**
+ * Reads Logical Screen Descriptor (逻辑屏幕标识符)
+ */
+static PARSE_STATUS readLSD(FILE *file, GIF_LSD *returnLSD) {
+    if (file == NULL || returnLSD == NULL) { return RECEIVED_NULL_PARAM; }
+    if (feof(file)) { return UNEXPECTED_EOF; }
 
-    fread(&returnLSD->GlobalFlag, 1, 1, file);
+    fread(returnLSD, 7, 1, file);
 
-    fread(&returnLSD->Background, 1, 1, file);
-    fread(&returnLSD->Aspect, 1, 1, file);
-
-    return 0;
+    return PARSE_SUCCESS;
 }
 
-static int readGlobalColorTable(FILE *file, int tSize, GIF_COLOR_TABLE *returnGCD) {
-    /**
-     * Reads Global Color Table
-     */
+/**
+ * Reads Global Color Table (全局颜色列表)
+ */
+static PARSE_STATUS readGlobalColorTable(FILE *file, int tSize, GIF_RGB_VALUE *returnGCD) {
+    if (file == NULL || returnGCD == NULL) { return RECEIVED_NULL_PARAM; }
+
     for (int i = 0; i < tSize; ++i) {
-        fread((returnGCD + i), sizeof(GIF_COLOR_TABLE), 1, file);
+        if (feof(file)) { return UNEXPECTED_EOF; }
+        fread((returnGCD + i), sizeof(GIF_RGB_VALUE), 1, file);
     }
 
-    return 0;
+    return PARSE_SUCCESS;
 }
 
-static int readImageDescriptors(FILE *file, GIF_IMAGE *returnImages, int *returnSize) {
-    char charBuffer;
-    *returnSize = 0;
-
-
-    for (fread(&charBuffer, 1, 1, file);
-         charBuffer ^ ','; fread(&charBuffer, 1, 1, file)) {
-        returnSize++;
-    }
-
-    return 0;
-}
-
-static void printHeader(GIF_HEADER header) {
-    /**
-     * Print Header
-     */
+/**
+* Print Header (文件头)
+*/
+static void printHeader(GIF_HEADER *header) {
     printf("\n<Header>\n");
-    printf("Format: %3.3s %3.3s\n", header.Signature, header.Version);
+    printf("Format: %3.3s %3.3s\n", header->signature, header->version);
 }
 
-static void printLSD(GIF_LSD lsd) {
-    /**
-     * Print Logical Screen Descriptor
-     */
+/**
+ * Print Logical Screen Descriptor (逻辑屏幕标识符)
+ */
+static void printLSD(GIF_LSD *lsd) {
     printf("\n<Logical Screen Descriptor>\n");
-    printf("Resolution: %d x %d\n", lsd.Width, lsd.Height);
+    printf("Resolution: %d x %d\n", lsd->width, lsd->height);
 
-    printf("Global Color Table Flag: %s\n", lsd.GlobalFlag.GlobalPal ? "True" : "False");
-    printf("Color Resolution: %d bits\n", lsd.GlobalFlag.ColorRes + 1);
-    printf("Sort Flag: %s\n", lsd.GlobalFlag.SortFlag ? "True" : "False");
-    printf("Size of Global Color Table: %d\n", 1 << (lsd.GlobalFlag.PalBits + 1));
+    printf("Have Global Color Table: %s\n", lsd->globalFlag.m ? "True" : "False");
+    printf("Color Resolution: %d bits\n", lsd->globalFlag.cr + 1);
+    printf("Sort Flag: %s\n", lsd->globalFlag.s ? "True" : "False");
+    printf("Size of Global Color Table: %d\n", 1 << (lsd->globalFlag.pixel + 1));
 
-    printf("BackgroundColor Index: %d\n", lsd.Background);
+    printf("BackgroundColor Index: %d\n", lsd->background);
 
-    if (lsd.Aspect == 0)
+    if (lsd->aspect == 0)
         printf("PixelAspect Ratio: None\n");
     else
-        printf("PixelAspect Ratio: %.2lf\n", ((double) lsd.Aspect + 15) / 64);
+        printf("PixelAspect Ratio: %.2lf\n", ((double) lsd->aspect + 15) / 64);
 }
 
-static void printGlobalColorTable(GIF_COLOR_TABLE *gct, int tSize) {
-    /**
-     * Print Global Color Table
-     */
-    GIF_COLOR_TABLE tableBuffer;
+/**
+ * Print Global Color Table (全局颜色列表)
+ */
+static void printGlobalColorTable(GIF_RGB_VALUE *gct, int tSize) {
+    GIF_RGB_VALUE tableBuffer;
 
     printf("\n<Global Color Table>\n");
     for (int i = 0; i < tSize; ++i) {
         tableBuffer = *(gct + i);
-        printf("(%3.d, %3.d, %3.d)", tableBuffer.Red, tableBuffer.Green, tableBuffer.Blue);
-        printf((i + 1) % 8 == 0 ? "\n" : "\t");
+        printf("(%3.d,%3.d,%3.d)", tableBuffer.Red, tableBuffer.Green, tableBuffer.Blue);
+        printf((i + 1) % 8 == 0 ? "\n" : " ");
     }
 }
 
-int getGifInfo(FILE *file) {
-    GIF_HEADER header;
-    GIF_LSD lsd;
-    GIF_COLOR_TABLE *globalTable = NULL;
-    GIF_COLOR_TABLE *localTable = NULL;
+PARSE_STATUS getGifInfo(FILE *file) {
+    PARSE_STATUS error_code;
+    GIF_INFO gifInfo;
 
-    if (readHeader(file, &header) != 0)
-        return 1;  /* Not a GIF */
+    if (file == NULL) { return RECEIVED_NULL_PARAM; }
 
-    readLSD(file, &lsd);
+    if ((error_code = readHeader(file, &gifInfo.header)) != PARSE_SUCCESS) {
+        goto cleaning;
+    } else {
+        printHeader(&gifInfo.header);
+    }
 
-    globalTable = (GIF_COLOR_TABLE *)
-            malloc(sizeof(GIF_COLOR_TABLE) * (1 << (lsd.GlobalFlag.PalBits + 1)));
+    if ((error_code = readLSD(file, &gifInfo.lsd)) != PARSE_SUCCESS) {
+        goto cleaning;
+    } else {
+        printLSD(&gifInfo.lsd);
+    }
 
-    readGlobalColorTable(file, 1 << (lsd.GlobalFlag.PalBits + 1), globalTable);
+    if (gifInfo.lsd.globalFlag.m == 1) {
+        int gcbSize = 1 << (gifInfo.lsd.globalFlag.pixel + 1);
+        gifInfo.gcb = (GIF_RGB_VALUE *) malloc(sizeof(GIF_RGB_VALUE) * gcbSize);
 
-    printHeader(header);
-    printLSD(lsd);
-    printGlobalColorTable(globalTable, 1 << (lsd.GlobalFlag.PalBits + 1));
+        if ((error_code = readGlobalColorTable(file, gcbSize, gifInfo.gcb)) != PARSE_SUCCESS) {
+            goto cleaning;
+        } else {
+            printGlobalColorTable(gifInfo.gcb, gcbSize);
+        }
+    }
 
-    free(globalTable);
-    free(localTable);
+    error_code = PARSE_SUCCESS;
 
-    return 0;
+    cleaning:
+    free(gifInfo.gcb);
+    return error_code;
 }
