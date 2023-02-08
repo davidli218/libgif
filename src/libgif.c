@@ -10,10 +10,13 @@
 static PARSE_STATUS readHeader(FILE *file, GIF_HEADER *returnHeader) {
     char stringBuffer[6];
 
-    if (file == NULL || returnHeader == NULL) { return RECEIVED_NULL_PARAM; }
-    if (feof(file)) { return UNEXPECTED_EOF; }
+    if (file == NULL || returnHeader == NULL) {
+        return RECEIVED_NULL_PARAM;
+    }
 
-    fread(stringBuffer, 1, 6, file);
+    if (fread(stringBuffer, 1, 6, file) != 6) {
+        return UNEXPECTED_EOF;
+    }
 
     if (memcmp(stringBuffer, "GIF87a", 6) != 0 &&
         memcmp(stringBuffer, "GIF89a", 6) != 0) {
@@ -32,10 +35,13 @@ static PARSE_STATUS readHeader(FILE *file, GIF_HEADER *returnHeader) {
  * Reads Logical Screen Descriptor (逻辑屏幕标识符)
  */
 static PARSE_STATUS readLSD(FILE *file, GIF_LSD *returnLSD) {
-    if (file == NULL || returnLSD == NULL) { return RECEIVED_NULL_PARAM; }
-    if (feof(file)) { return UNEXPECTED_EOF; }
+    if (file == NULL || returnLSD == NULL) {
+        return RECEIVED_NULL_PARAM;
+    }
 
-    fread(returnLSD, 7, 1, file);
+    if (fread(returnLSD, 7, 1, file) != 1) {
+        return UNEXPECTED_EOF;
+    }
 
     return PARSE_SUCCESS;
 }
@@ -44,11 +50,14 @@ static PARSE_STATUS readLSD(FILE *file, GIF_LSD *returnLSD) {
  * Reads Global Color Table (全局颜色列表)
  */
 static PARSE_STATUS readGlobalColorTable(FILE *file, int tSize, GIF_RGB_VALUE *returnGCD) {
-    if (file == NULL || returnGCD == NULL) { return RECEIVED_NULL_PARAM; }
+    if (file == NULL || returnGCD == NULL) {
+        return RECEIVED_NULL_PARAM;
+    }
 
     for (int i = 0; i < tSize; ++i) {
-        if (feof(file)) { return UNEXPECTED_EOF; }
-        fread((returnGCD + i), sizeof(GIF_RGB_VALUE), 1, file);
+        if (fread((returnGCD + i), sizeof(GIF_RGB_VALUE), 1, file) != 1) {
+            return UNEXPECTED_EOF;
+        }
     }
 
     return PARSE_SUCCESS;
@@ -100,7 +109,11 @@ PARSE_STATUS getGifInfo(FILE *file) {
     PARSE_STATUS error_code;
     GIF_INFO gifInfo;
 
-    if (file == NULL) { return RECEIVED_NULL_PARAM; }
+    rewind(file);
+
+    if (file == NULL) {
+        return RECEIVED_NULL_PARAM;
+    }
 
     if ((error_code = readHeader(file, &gifInfo.header)) != PARSE_SUCCESS) {
         goto cleaning;
